@@ -22,6 +22,7 @@ class GroupOrders extends Migration
             $table->foreignId('riders_id')->nullable();
             $table->foreign('riders_id')->references('id')->on('users');
             $table->string('controlNumber');
+            $table->tinyInteger('isForDelivery')->default(0);
             $table->timestamps();
             $table->softDeletes();
         });

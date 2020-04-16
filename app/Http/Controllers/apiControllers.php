@@ -154,7 +154,7 @@ class apiControllers extends Controller
                         <div class="card" style="width: 18rem;">
                             <div class="card-body">
                                 <h5 class="card-title">'.$out->category.'</h5>
-                                <p class="card-text">'.$out->product.' - '.$out->price.' Per Kilo</p>
+                                <p class="card-text">'.$out->product.' - '.$out->price.' Pesos</p>
                                 <button class="btn btn-outline-info btn-block" onclick="addToCart('.$out->btnId.', '.$out->sellers_id.')">Add To Cart</button>
                                 <small>Sold By: '.$out->seller.'</small>
                             </div>
@@ -275,6 +275,8 @@ class apiControllers extends Controller
         ->join('orders as b', 'a.orders_id', '=', 'b.id')
         ->join('sellers as c', 'b.items_id', '=', 'c.id')
         ->where('a.is_paid', 0)
+        ->whereNull('a.deleted_at')
+        ->where('b.users_id', Auth::user()->id)
         ->groupBy('a.controlNumber')
         ->get();
 
@@ -303,5 +305,324 @@ class apiControllers extends Controller
             ]);
         }
 
+    }
+
+    public function forPayment(Request $request){
+        $query = DB::connection('mysql')
+        ->table('group_roders as a')
+        ->select(
+            'a.controlNumber as controlNumber',
+            'c.fullname as soldBy',
+            'c.mobilenumber as sellersmobilenumber',
+            'c.email as sellersemail',
+            DB::raw("CONCAT(d.product, ' x', COUNT(b.items_id), ' PRICE: ', SUM(d.price)) as orders"),
+            DB::raw("SUM(d.price) as total")
+        )
+        ->join('orders as b', 'a.orders_id', '=', 'b.id')
+        ->join('users as c', 'b.sellers_id', '=', 'c.id')
+        ->join('sellers as d', 'b.items_id', '=', 'd.id')
+        ->where('a.controlNumber', $request->id)
+        ->groupBy('a.controlNumber', 'c.fullname', 'c.mobilenumber', 'c.email', 'd.product', 'b.quantity', 'd.price')
+        ->get();
+
+        $data = [];
+
+        if(!$query->isEmpty()){
+            for($i = 0; $i < count($query); $i++){
+                $data[] = [
+                    'items' => $query[$i]->orders,
+                    'total' => $query[$i]->total
+                ];
+            }
+            return response()->json([
+                'response' => true,
+                'data' => $data,
+                'controlNumber' => $query[0]->controlNumber,
+                'seller' => $query[0]->soldBy,
+                'mobileNumberSeller' => $query[0]->sellersmobilenumber,
+                'emailSeller' => $query[0]->sellersemail,
+                'message' => "Loaded summary of your orders for control number: " . $query[0]->controlNumber
+            ]);
+        }else{
+            return response()->json([
+                'response' => false,
+                'data' => array(),
+                'message' => "Server Error"
+            ]);
+        }
+
+    }
+
+    public function paymentDone(Request $request){
+        $query = DB::connection('mysql')
+        ->table('group_roders')
+        ->where('controlNumber', $request->id)
+        ->update([
+            'deleted_at' => DB::raw("NOW()")
+        ]);
+
+        if($query){
+            return response()->json([
+                'response' => true,
+                'message' => "You will receive a text message shorty from the seller, if the payment was success"
+            ]);
+        }else{
+            return response()->json([
+                'response' => false,
+                'message' => "There's an error occured!"
+            ]);
+        }
+    }
+
+    public function fetchMyItems(){
+        $user = Auth::user()->id;
+        $query = DB::connection('mysql')
+        ->table('sellers as a')
+        ->select(
+            'a.id as btnId',
+            'a.product as product',
+            'a.quantity as quantity',
+            'a.price as price',
+            'b.category as category'
+        )
+        ->join('categories as b', 'a.category_id', '=', 'b.id')
+        ->where('a.sellers_id', $user)
+        ->whereNull('a.deleted_at')
+        ->get();
+
+        if(!$query->isEmpty()){
+            return response()->json([
+                'response' => true,
+                'data' => $query
+            ]);
+        }
+
+    }
+
+    public function editThisItem(Request $request){
+
+        $query = DB::connection('mysql')
+        ->table('sellers as a')
+        ->select(
+            'a.product as product',
+            'a.quantity as quantity',
+            'a.price as price',
+            'a.id as btnId'
+        )
+        ->join('categories as b', 'a.category_id', '=', 'b.id')
+        ->where('a.id', $request->id)
+        ->get();
+
+        if(!$query->isEmpty()){
+            return response()->json([
+                'response' => true,
+                'data' => $query
+            ]);
+        }else{
+            return response()->json([
+                'response' => false,
+                'data' => array()
+            ]);
+        }
+
+    }
+
+    public function deleteThisItem(Request $request){
+        $query = DB::connection('mysql')
+        ->table('sellers')
+        ->where('id', $request->id)
+        ->update([
+            'deleted_at' => DB::raw("NOW()")
+        ]);
+
+        return response()->json([
+            'response' => true
+        ]);
+    }
+
+    public function editThis(Request $request){
+
+        $query = DB::connection('mysql')
+        ->table('sellers')
+        ->where('id', $request->id)
+        ->update([
+            'product' => $request->product,
+            'quantity' => $request->quantity,
+            'price' => $request->price
+        ]);
+
+        if($query){
+            return response()->json([
+                'response' => true
+            ]);
+        }else{
+            return response()->json([
+                'response' => false
+            ]);
+        }
+
+    }
+
+    public function fetchCategories(){
+        $query = DB::connection('mysql')
+        ->table('categories')
+        ->select(
+            'id as id',
+            'category as category'
+        )
+        ->get();
+
+        if(!$query->isEmpty()){
+            return response()->json([
+                'response' => true,
+                'data' => $query
+            ]);
+        }else{
+            return response()->json([
+                'response' => false,
+                'data' => array()
+            ]);
+        }
+    }
+
+    public function addItem(Request $request){
+        $userid = Auth::user()->id;
+        $query = DB::connection('mysql')
+        ->table('sellers')
+        ->insert([
+            'sellers_id' => $userid,
+            'category_id' => $request->categories,
+            'product' => $request->product,
+            'quantity' => $request->quantity,
+            'price' => $request->price,
+            'created_at' => DB::raw("NOW()")
+        ]);
+            
+        if($query){
+            return response()->json([
+                'response' => true,
+                'message' => "Adding Product " . $request->product . " Successful!"
+            ]);
+        }else{
+            return response()->json([
+                'response' => false,
+                'message' => "There's an error occurred"
+            ]);
+        }
+
+    }
+
+    public function fetchPendingPaidOrders(){
+        $query = DB::connection('mysql')
+        ->table('group_roders as a')
+        ->select(
+            'a.controlNumber',
+            DB::raw("GROUP_CONCAT(c.product SEPARATOR '<br/>') as orders"),
+            DB::raw("GROUP_CONCAT(b.quantity SEPARATOR '<br/>') as quantity"),
+            DB::raw("SUM(c.price) as total")
+        )
+        ->join('orders as b', 'a.orders_id', '=', 'b.id')
+        ->join('sellers as c', 'b.items_id', '=', 'c.id')
+        ->where('a.is_paid', 0)
+        ->where('a.isForDelivery', 0)
+        ->whereNotNull('a.deleted_at')
+        ->where('b.sellers_id', Auth::user()->id)
+        ->groupBy('a.controlNumber')
+        ->get();
+
+        if(!$query->isEmpty()){
+            return response()->json([
+                'response' => true,
+                'data' => $query
+            ]);
+        }else{
+            return response()->json([
+                'response' => false,
+                'data' => array()
+            ]);
+        }
+
+    }
+
+    public function forDelivery(Request $request){
+
+        $query = DB::connection('mysql')
+        ->table('group_roders as a')
+        ->select(
+            'a.orders_id',
+            'b.items_id'
+        )
+        ->join('orders as b', 'a.orders_id', '=', 'b.id')
+        ->where('a.controlNumber', $request->id)
+        ->get();
+
+        foreach($query as $out){
+            $updateSellersTable = DB::connection('mysql')
+            ->table('sellers')
+            ->where('id', $out->items_id)
+            ->decrement('quantity', 1);
+        }
+
+        $setForDelivery = DB::connection('mysql')
+        ->table('group_roders')
+        ->where('controlNumber', $request->id)
+        ->update([
+            'is_paid' => 1,
+            'isForDelivery' => 1
+        ]);
+
+        if($setForDelivery){
+            return response()->json([
+                'response' => true,
+                'message' => "The Control Number " . $request->id . " is now for delivery"
+            ]);
+        }else{
+            return response()->json([
+                'response' => false,
+                'message' => "There's an error occured"
+            ]);
+        }
+
+    }
+
+    public function fetchForDeliveryOrders(){
+        $query = DB::connection('mysql')
+        ->table('orders as a')
+        ->select(
+            'b.controlNumber as controlNumber'
+        )
+        ->join('group_roders as b', 'a.id', '=', 'b.orders_id')
+        ->where('a.sellers_id', Auth::user()->id)
+        ->where('b.isForDelivery', 1)
+        ->groupBy('b.controlNumber')
+        ->get();
+
+        if(!$query->isEmpty()){
+            return response()->json([
+                'response' => true,
+                'data' => $query
+            ]);
+        }
+
+    }
+    
+    public function fetchForDeliveryOrdersClient(){
+        $query = DB::connection('mysql')
+        ->table('orders as a')
+        ->select(
+            'b.controlNumber as controlNumber'
+        )
+        ->join('group_roders as b', 'a.id', '=', 'b.orders_id')
+        ->where('a.users_id', Auth::user()->id)
+        ->where('b.isForDelivery', 1)
+        ->groupBy('b.controlNumber')
+        ->get();
+
+        if(!$query->isEmpty()){
+            return response()->json([
+                'response' => true,
+                'data' => $query
+            ]);
+        }
     }
 }

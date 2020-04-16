@@ -48,19 +48,43 @@
         </div>
     </div>
     <div class="tab-pane container fade" id="fordelivery">
-        test
+        <table class="table table-striped" id="forDeliveryOrders" style="width: 100%;">
+            <thead>
+                <tr>
+                    <th>Control Number</th>
+                </tr>
+            </thead>
+        </table>
     </div>
 </div>
-
+@include('client.modals.payment')
 @endsection
 
 @section('scripts')
 <script>
-var cartTable, onqueueorders;
+var cartTable, onqueueorders, forDeliveryOrders;
 $(document).ready(function(){
     fetchMyOrders();
     fetchQueuedOrders();
+    fetchForDeliveryOrdersClient();
 });
+function fetchForDeliveryOrdersClient(){
+    $.ajax({
+        url : "{{ url('fetchForDeliveryOrdersClient') }}",
+        method : "GET"
+    }).done(function(response){
+        if(response.response){
+            forDeliveryOrders = $('#forDeliveryOrders').DataTable().destroy();
+            forDeliveryOrders = $('#forDeliveryOrders').DataTable({
+                data: response.data,
+                columns:[
+                    { data: "controlNumber" }
+                ]
+            });
+            $('.dataTables_length').css("display", "none");
+        }
+    });
+}
 function fetchQueuedOrders(){
     $.ajax({
         url: "{{ url('fetchQueuedOrders') }}",
@@ -143,7 +167,55 @@ function addToGroup(id){
 }
 
 function payment(id){
-    console.log(id);
+    // $('#paymentModal').modal('show');
+    $.ajax({
+        url: "{{ url('forPayment') }}",
+        method: "post",
+        data :{
+            "_token": "{{ csrf_token() }}",
+            id : id
+        }
+    }).done(function(response){
+        if(response.response){
+            var content = "";
+            var total = 0;
+            $('#paymentModalTitle').html("Control Number: " + response.controlNumber);
+            $('#sellerName').html("Sold By:<br/>" + response.seller);
+            $('#sellerMobile').html("GCash:<br/>" + response.mobileNumberSeller);
+            $('#sellerEmail').html("Email:<br/>" + response.emailSeller);
+            $.each(response.data, function(i, v){
+                content += v.items + "<br/>"
+                total += Number(v.total);
+            });
+            $('#orderslist').html(content);
+            $('#total').html("Total: " + total);
+            $('#paymentButton').html("<button class='btn btn-info' onclick='donePayment("+response.controlNumber+")'>Payment Done</button>");
+            $('#paymentModal').modal('show');
+        }
+    });
+}
+
+function donePayment(id){
+    $.ajax({
+        url : "{{ url('paymentDone') }}",
+        method : "POST",
+        data : {
+            "_token": "{{ csrf_token() }}",
+            id : id
+        }
+    }).done(function(response){
+        if(response.response){
+            $('#paymentModal').modal('hide');
+            toastr.success(response.message);
+            fetchMyOrders();
+            fetchQueuedOrders();
+        }else{
+            $('#paymentModal').modal('hide');
+            toastr.error(response.message);
+            fetchMyOrders();
+            fetchQueuedOrders();
+        }
+    });
 }
 
 function deletethis(id){

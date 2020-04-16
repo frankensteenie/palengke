@@ -21,6 +21,21 @@ Route::group(['middleware' => ['preventbackhistory']], function () {
         Route::post('addToGroup', 'apiControllers@addToGroup');
         Route::get('fetchQueuedOrders', 'apiControllers@fetchQueuedOrders');
         Route::post('deleteThis', 'apiControllers@deleteThis');
+        Route::post('forPayment', 'apiControllers@forPayment');
+        Route::post('paymentDone', 'apiControllers@paymentDone');
+        Route::get('fetchForDeliveryOrdersClient', 'apiControllers@fetchForDeliveryOrdersClient');
+
+        // sellers
+        Route::get('fetchMyItems', 'apiControllers@fetchMyItems');
+        Route::post('editThisItem', 'apiControllers@editThisItem');
+        Route::post('deleteThisItem', 'apiControllers@deleteThisItem');
+        Route::post('editThis', 'apiControllers@editThis');
+
+        Route::get('fetchCategories', 'apiControllers@fetchCategories');
+        Route::post('addItem', 'apiControllers@addItem');
+        Route::get('fetchPendingPaidOrders', 'apiControllers@fetchPendingPaidOrders');
+        Route::post('forDelivery', 'apiControllers@forDelivery');
+        Route::get('fetchForDeliveryOrders', 'apiControllers@fetchForDeliveryOrders');
     });
 
 });
